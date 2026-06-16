@@ -1,0 +1,6 @@
+google-adk
+google-cloud-aiplatform
+neo4j
+chromadb
+langchain-google-vertexai
+python-dotenv
