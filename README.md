@@ -59,24 +59,40 @@ Easiest environment is **Google Cloud Shell** (everything pre-installed, runs in
 
 ## Setup
 
-### 1. Enable Vertex AI
+> **Working in Google Cloud Shell?** Everything below runs in the browser. Clone the repo, then
+> open the **Cloud Shell Editor** so all the files are in front of you, ready to edit.
+
+### 1. Get the starter code
+
+```bash
+git clone https://github.com/pytee/agentic-kag-starter.git
+cd agentic-kag-starter
+```
+
+Open it in the editor (or click **Open Editor** in the Cloud Shell toolbar):
+
+```bash
+cloudshell edit .
+```
+
+### 2. Enable Vertex AI
 
 ```bash
 gcloud services enable aiplatform.googleapis.com
 ```
 
-### 2. Create a Neo4j AuraDB Free instance
+### 3. Create a Neo4j AuraDB Free instance
 
 At [console.neo4j.io](https://console.neo4j.io), create an **AuraDB Free** instance and
 **download the credentials file when prompted** (the URI and password are shown only once).
 
-### 3. Install dependencies
+### 4. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configure your secrets
+### 5. Configure your secrets
 
 ```bash
 cp .env.example .env
@@ -132,8 +148,12 @@ ADK's web UI expects the agent inside its own package folder. Quick setup:
 mkdir kag_agent
 cp agent.py kag_agent/agent.py
 echo "from .agent import root_agent" > kag_agent/__init__.py
-adk web
+adk web --port 8080
 ```
+
+> **Port note:** `adk web` defaults to port **8000**, but Cloud Shell's **Web Preview**
+> opens port **8080** — so launch with `--port 8080` (above) to make them match, or leave
+> the default and use Web Preview → **Change port → 8000**. Otherwise the preview is blank.
 
 In Cloud Shell, click the **Web Preview** link, pick `kag_agent`, and ask away.
 Open the **Events / Trace** tab on any response to see the agent's reasoning, which

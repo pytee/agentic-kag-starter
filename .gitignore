@@ -1,0 +1,18 @@
+# secrets — never commit
+.env
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# chroma local store (if you switch to PersistentClient)
+.chroma/
+chroma/
+
+# os / editor
+.DS_Store
+.vscode/
+.idea/
