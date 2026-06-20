@@ -532,7 +532,8 @@ def query_vectors(question: str) -> str:
       <p>Start the UI on port <strong>8080</strong> so it lines up with Cloud Shell's Web Preview:</p>
       {{CODE:2}}
       <div class="note warn"><div class="ic">!</div><div><b>Port matters.</b> <code class="inl">adk web</code> defaults to port <b>8000</b>, but Cloud Shell's <b>Web Preview</b> opens port <b>8080</b>. The <code class="inl">--port 8080</code> above makes them match — otherwise you'll get a blank page. (Alternatively, leave the default and use Web Preview → <b>Change port → 8000</b>.)</div></div>
-      <p>Click <strong>Web Preview</strong> (top-right of Cloud Shell), pick <code class="inl">kag_agent</code>, and try these:</p>
+      <div class="note warn"><div class="ic">!</div><div><b>Launch from the repo folder, not your home directory.</b> <code class="inl">adk web</code> only lists agents in the folder you start it from — that's why the command above <code class="inl">cd</code>s into <code class="inl">agentic-kag-starter</code> first. Start it from <code class="inl">~</code> and ADK treats the <b>repo folder itself</b> as an agent and chokes on the hyphens: <code class="inl">ValueError: Invalid agent name: 'agentic-kag-starter'</code>. If the dropdown shows <code class="inl">agentic-kag-starter</code> (or a stale app keeps throwing 500s), you launched from the wrong place — press <code class="inl">Ctrl+C</code>, run <code class="inl">cd ~/agentic-kag-starter</code>, relaunch, then <b>hard-refresh</b> the ADK tab (<code class="inl">Ctrl+Shift+R</code>) to clear the cached selection.</div></div>
+      <p>Open <strong>Web Preview</strong> (top-right of Cloud Shell) on port <strong>8080</strong>. It opens the <strong>ADK dev UI</strong> in a new tab — the agent picker is the <strong>dropdown at the top-left of that page</strong>, not in the Web Preview menu. Choose <code class="inl">kag_agent</code> and try these:</p>
       {{TABLE_AGENT}}
       <p>The agent reasons about the <em>shape</em> of the question, calls a tool, and explains its choice. That's dynamic decision-making — it isn't hard-coded to one retrieval strategy.</p>
       <div class="note tip"><div class="ic">i</div><div><b>No-UI fallback.</b> If Web Preview is fiddly in your lab, skip it entirely — the repo ships a headless runner. Run <code class="inl">python run_agent.py</code> (or pass your own question: <code class="inl">python run_agent.py "Who leads the Vision Lab?"</code>). Here's what it does:</div></div>
@@ -560,7 +561,8 @@ root_agent = Agent(
       {file:"Cloud Shell", lang:"bash", code:`mkdir kag_agent
 cp agent.py kag_agent/agent.py
 echo "from .agent import root_agent" > kag_agent/__init__.py`},
-      {file:"Cloud Shell", lang:"bash", code:`adk web --port 8080`},
+      {file:"Cloud Shell", lang:"bash", code:`cd ~/agentic-kag-starter   # the folder that CONTAINS kag_agent/
+adk web --port 8080`},
       {file:"run_agent.py", lang:"python", code:`import sys, asyncio
 from google.adk.runners import InMemoryRunner
 from google.genai import types
