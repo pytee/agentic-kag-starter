@@ -145,15 +145,32 @@ python run_agent.py "Who leads the Vision Lab?"
 ADK's web UI expects the agent inside its own package folder. Quick setup:
 
 ```bash
+# Run everything below from the PROJECT ROOT — the agentic-kag-starter folder
+# that contains agent.py. (Do NOT cd into kag_agent: adk scans the current
+# folder for agent packages, so it must run one level above kag_agent.)
+cd ~/agentic-kag-starter
+
 mkdir kag_agent
 cp agent.py kag_agent/agent.py
 echo "from .agent import root_agent" > kag_agent/__init__.py
-adk web --port 8080
+
+adk web --port 8080 --allow_origins "regex:https://.*\.cloudshell\.dev"
 ```
 
 > **Port note:** `adk web` defaults to port **8000**, but Cloud Shell's **Web Preview**
 > opens port **8080** — so launch with `--port 8080` (above) to make them match, or leave
 > the default and use Web Preview → **Change port → 8000**. Otherwise the preview is blank.
+
+> **Run from the project root, not from inside `kag_agent`.** `adk web` looks for agent
+> packages in the *current* directory, so it must run from `agentic-kag-starter` (which
+> contains the `kag_agent/` package). Launching it from your home directory makes ADK try
+> to load the `agentic-kag-starter` folder itself as an agent and fail with
+> *"Invalid agent name … must be valid Python identifiers"* (the hyphen), while launching
+> it from *inside* `kag_agent` finds no agent at all.
+
+> **CORS note:** `--allow_origins` is required when you open the UI through Cloud Shell's
+> **Web Preview** (a `*.cloudshell.dev` origin). Without it the page loads but starting a
+> chat fails with `403 Forbidden` on `POST /apps/kag_agent/users/user/sessions`.
 
 In Cloud Shell, click the **Web Preview** link, pick `kag_agent`, and ask away.
 Open the **Events / Trace** tab on any response to see the agent's reasoning, which
@@ -196,6 +213,16 @@ the vector approach degrades while the graph keeps winning.
   ```bash
   gcloud ai models list --region=$GOOGLE_CLOUD_LOCATION
   ```
+- **`adk web` → `Invalid agent name: 'agentic-kag-starter' … must be valid Python identifiers`** —
+  you launched `adk web` from the wrong folder (e.g. your home directory). Run it from the
+  project root (`cd ~/agentic-kag-starter`) so ADK finds the `kag_agent/` package below it.
+- **`403 Forbidden` on `POST /apps/kag_agent/users/user/sessions`** — a CORS block when using
+  Cloud Shell Web Preview. Relaunch with
+  `adk web --port 8080 --allow_origins "regex:https://.*\.cloudshell\.dev"`.
+- **`kag_agent` missing / blank dropdown** — confirm the package exists and is valid UTF-8:
+  `cat kag_agent/__init__.py` should print `from .agent import root_agent`. If you ran the
+  `echo` step in PowerShell instead of bash it may be UTF-16; recreate it with
+  `echo "from .agent import root_agent" > kag_agent/__init__.py` in bash.
 
 ---
 
