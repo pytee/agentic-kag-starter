@@ -25,7 +25,12 @@ _collection.upsert(
 
 
 def query_vectors(question: str) -> str:
-    """Answer fuzzy/descriptive questions by semantic similarity search."""
+    """Answer open-ended DESCRIPTIVE questions by semantic similarity search.
+
+    Use only when there is no specific relationship to traverse, e.g. 'what does
+    Coastal Tech specialize in?' or 'describe the robotics program'. For who/what
+    is connected to a named entity, use query_graph instead.
+    """
     qvec = _embed.embed_query(question)
     res = _collection.query(query_embeddings=[qvec], n_results=2)
     return "\n---\n".join(res["documents"][0])

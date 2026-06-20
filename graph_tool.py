@@ -28,7 +28,12 @@ Question: {q}"""
 
 
 def query_graph(question: str) -> str:
-    """Answer relational questions by querying the Neo4j knowledge graph."""
+    """Answer questions about RELATIONSHIPS between named entities via the Neo4j graph.
+
+    Use for who leads/teaches/built/supervises what, prerequisites, alumni,
+    counting, and multi-hop 'the X of the Y that Z' chains -- including single
+    relationship lookups like 'who leads the Vision Lab?'.
+    """
     resp = _model.generate_content(CYPHER_PROMPT.format(schema=SCHEMA, q=question))
     cypher = (
         resp.text.strip()
