@@ -372,8 +372,9 @@ NEO4J_PASSWORD = os.environ["NEO4J_PASSWORD"]`}
       {{CODE:3}}
       <div class="note check"><div class="ic">✓</div><div><b>Checkpoint — the payoff.</b> Open your AuraDB console → <b>Query</b>, and run <code class="inl">MATCH (n)-[r]->(m) RETURN n,r,m</code>. Your three paragraphs are now a visual network of nodes and edges. Screenshot it — this is the moment KAG clicks.</div></div>
       <h3>2.4 — Query the graph in plain English</h3>
-      <p>Open <code class="inl">graph_tool.py</code>. Gemini writes Cypher (Neo4j's query language) from a question, we run it, and return the result.</p>
+      <p>Open <code class="inl">graph_tool.py</code>. Gemini writes Cypher (Neo4j's query language) from a question, we run it, and return the result. Notice <code class="inl">_live_schema()</code>: instead of hardcoding the relationship names, it reads them back from the graph at query time.</p>
       {{CODE:4}}
+      <div class="note tip"><div class="ic">i</div><div><b>Why read the schema live?</b> Building the graph used Gemini to <b>extract</b> triples, and that's non-deterministic — the same sentence ("Robotics uses PixelKit") might come out as <code class="inl">USED_IN</code> with the direction flipped, or as a slightly different verb. A hardcoded schema then promises a <code class="inl">USES</code> edge that doesn't exist, Gemini writes valid-looking Cypher against it, and you get an empty <code class="inl">Result: []</code> plus a <code class="inl">relationship type ... does not exist</code> warning. Feeding the <b>real</b> relationship names and edges into the prompt keeps the query grounded in what was actually built. <i>Seeing an empty result anyway? Run <code class="inl">MATCH (a)-[r]->(b) RETURN a.name, type(r), b.name</code> in the AuraDB console to see the names your extraction produced.</i></div></div>
       <p>Test the multi-hop power directly:</p>
       {{CODE:5}}
       <p>Watch it traverse PixelKit → Robotics → (prerequisite) Machine Learning → Dr. Lina Cheong. That's a 3-hop join no vector search can do reliably.</p>
@@ -466,18 +467,28 @@ vertexai.init(project=PROJECT, location=LOCATION)
 _model = GenerativeModel(GEMINI_MODEL)
 _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
-SCHEMA = """Nodes: (:Entity {name, type})
-Relationships: TEACHES, LEADS, BUILT, USES, STUDIED_AT,
-PREREQUISITE_FOR, SUPERVISES, ALUMNUS_OF (all directed source->target)"""
-
 CYPHER_PROMPT = """Given this Neo4j schema:
 {schema}
 Write ONE Cypher query answering the question. Return ONLY the query, no markdown.
 Question: {q}"""
 
+def _live_schema() -> str:
+    # LLM extraction is non-deterministic (it may emit USED_IN instead of USES,
+    # or flip a direction), so read the REAL names + edges from the live graph
+    # instead of hardcoding a schema that quietly drifts out of sync.
+    with _driver.session() as s:
+        rels = [r["relationshipType"] for r in s.run("CALL db.relationshipTypes()")]
+        edges = [f'{r["a"]} -[:{r["rel"]}]-> {r["b"]}'
+                 for r in s.run("MATCH (a)-[r]->(b) "
+                                "RETURN a.name AS a, type(r) AS rel, b.name AS b LIMIT 40")]
+    return ("Nodes are (:Entity {name, type}); match nodes by their name.\\n"
+            f"Relationship types: {', '.join(rels)}\\n"
+            "Actual edges (use these exact names AND directions):\\n"
+            + "\\n".join(edges))
+
 def query_graph(question: str) -> str:
     """Answer relational questions by querying the Neo4j knowledge graph."""
-    resp = _model.generate_content(CYPHER_PROMPT.format(schema=SCHEMA, q=question))
+    resp = _model.generate_content(CYPHER_PROMPT.format(schema=_live_schema(), q=question))
     cypher = resp.text.strip().removeprefix("\`\`\`cypher").removeprefix("\`\`\`").removesuffix("\`\`\`").strip()
     with _driver.session() as s:
         rows = [r.data() for r in s.run(cypher)]

@@ -17,19 +17,37 @@ vertexai.init(project=PROJECT, location=LOCATION)
 _model = GenerativeModel(GEMINI_MODEL)
 _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
-SCHEMA = """Nodes: (:Entity {name, type})
-Relationships: TEACHES, LEADS, BUILT, USES, STUDIED_AT,
-PREREQUISITE_FOR, SUPERVISES, ALUMNUS_OF (all directed source->target)"""
-
 CYPHER_PROMPT = """Given this Neo4j schema:
 {schema}
 Write ONE Cypher query answering the question. Return ONLY the query, no markdown.
 Question: {q}"""
 
 
+def _live_schema() -> str:
+    """Ground the Cypher prompt in the REAL graph. LLM extraction is
+    non-deterministic — it may emit USED_IN instead of USES, or flip a
+    direction — so a hardcoded schema quickly drifts from what was built.
+    Reading the live relationship names and edges keeps them in sync."""
+    with _driver.session() as s:
+        rels = [r["relationshipType"] for r in s.run("CALL db.relationshipTypes()")]
+        edges = [
+            f'{r["a"]} -[:{r["rel"]}]-> {r["b"]}'
+            for r in s.run(
+                "MATCH (a)-[r]->(b) "
+                "RETURN a.name AS a, type(r) AS rel, b.name AS b LIMIT 40"
+            )
+        ]
+    return (
+        "Nodes are (:Entity {name, type}); match nodes by their name.\n"
+        f"Relationship types: {', '.join(rels)}\n"
+        "Actual edges (use these exact names AND directions):\n"
+        + "\n".join(edges)
+    )
+
+
 def query_graph(question: str) -> str:
     """Answer relational questions by querying the Neo4j knowledge graph."""
-    resp = _model.generate_content(CYPHER_PROMPT.format(schema=SCHEMA, q=question))
+    resp = _model.generate_content(CYPHER_PROMPT.format(schema=_live_schema(), q=question))
     cypher = (
         resp.text.strip()
         .removeprefix("```cypher")
