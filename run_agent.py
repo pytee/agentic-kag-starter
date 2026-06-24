@@ -8,7 +8,11 @@ import sys
 import asyncio
 from google.adk.runners import InMemoryRunner
 from google.genai import types
-from agent import root_agent
+
+try:
+    from kag_agent.agent import root_agent   # after step 4.1 (agent wrapped in a package)
+except ModuleNotFoundError:
+    from agent import root_agent              # before step 4.1 (agent.py at repo root)
 
 DEFAULT_Q = "Who teaches the prerequisite for the course that uses PixelKit?"
 

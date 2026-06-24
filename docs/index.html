@@ -508,12 +508,20 @@ def query_graph(question: str) -> str:
     `,
     code:[
       {file:"vector_tool.py", lang:"python", code:`import chromadb
-from langchain_google_vertexai import VertexAIEmbeddings
+import vertexai
+from vertexai.language_models import TextEmbeddingModel
 from corpus import DOCUMENTS
 from config import PROJECT, LOCATION
 
-_embed = VertexAIEmbeddings(model_name="text-embedding-005",
-                            project=PROJECT, location=LOCATION)
+# Use the same vertexai SDK as graph_tool — it authenticates cleanly in Cloud
+# Shell. LangChain's VertexAIEmbeddings routes through the google.genai client,
+# which fails here with "service account info is missing 'email' field".
+vertexai.init(project=PROJECT, location=LOCATION)
+_embed_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
+
+def _embed(texts):
+    return [e.values for e in _embed_model.get_embeddings(texts)]
+
 _client = chromadb.Client()
 _collection = _client.get_or_create_collection("corpus")
 
@@ -521,12 +529,12 @@ _collection = _client.get_or_create_collection("corpus")
 _collection.upsert(
     ids=[d["id"] for d in DOCUMENTS],
     documents=[d["text"] for d in DOCUMENTS],
-    embeddings=_embed.embed_documents([d["text"] for d in DOCUMENTS]),
+    embeddings=_embed([d["text"] for d in DOCUMENTS]),
 )
 
 def query_vectors(question: str) -> str:
     """Answer fuzzy/descriptive questions by semantic similarity search."""
-    qvec = _embed.embed_query(question)
+    qvec = _embed([question])[0]
     res = _collection.query(query_embeddings=[qvec], n_results=2)
     return "\\n---\\n".join(res["documents"][0])`},
       {file:"Cloud Shell", lang:"bash", code:`python -c "from vector_tool import query_vectors; print(query_vectors('Who teaches the prerequisite for the course that uses PixelKit?'))"`}
@@ -539,13 +547,14 @@ def query_vectors(question: str) -> str:
       <p>Now give Gemini <strong>both</strong> tools and let it decide which to use per question, using Google's <strong>Agent Development Kit (ADK)</strong>. Open <code class="inl">agent.py</code>.</p>
       {{CODE:0}}
       <h3>4.1 — Make the agent discoverable by <code class="inl">adk web</code></h3>
-      <p>ADK's web UI only lists agents that live in their own <strong>package folder</strong> — a directory with an <code class="inl">__init__.py</code> that exposes <code class="inl">root_agent</code>. The repo ships <code class="inl">agent.py</code> at the root, so wrap it in a <code class="inl">kag_agent/</code> package first (run this from the repo folder):</p>
+      <p>ADK's web UI only lists agents that live in their own <strong>package folder</strong> — a directory with an <code class="inl">__init__.py</code> that exposes <code class="inl">root_agent</code>. The repo ships <code class="inl">agent.py</code> at the root, so wrap it in a <code class="inl">kag_agent/</code> package first. Note the <code class="inl">mv</code> below: <b>move</b> <code class="inl">agent.py</code> into the package, don't copy it. If a stray <code class="inl">agent.py</code> is left at the repo root, <code class="inl">adk web</code> treats the <b>whole folder</b> as one agent named after it (<code class="inl">agentic-kag-starter</code>) — and the hyphens make it un-loadable, so <code class="inl">kag_agent</code> never shows up. Run this from the repo folder:</p>
       {{CODE:1}}
       <h3>4.2 — Launch the dev UI</h3>
-      <p>Start the UI on port <strong>8080</strong> so it lines up with Cloud Shell's Web Preview:</p>
+      <p>Start the UI on port <strong>8080</strong> so it lines up with Cloud Shell's Web Preview. The <code class="inl">--allow_origins "*"</code> flag is required — Web Preview serves the UI through a proxied <code class="inl">…cloudshell.dev</code> URL, and without it ADK rejects the session request:</p>
       {{CODE:2}}
       <div class="note warn"><div class="ic">!</div><div><b>Port matters.</b> <code class="inl">adk web</code> defaults to port <b>8000</b>, but Cloud Shell's <b>Web Preview</b> opens port <b>8080</b>. The <code class="inl">--port 8080</code> above makes them match — otherwise you'll get a blank page. (Alternatively, leave the default and use Web Preview → <b>Change port → 8000</b>.)</div></div>
-      <div class="note warn"><div class="ic">!</div><div><b>Launch from the repo folder, not your home directory.</b> <code class="inl">adk web</code> only lists agents in the folder you start it from — that's why the command above <code class="inl">cd</code>s into <code class="inl">agentic-kag-starter</code> first. Start it from <code class="inl">~</code> and ADK treats the <b>repo folder itself</b> as an agent and chokes on the hyphens: <code class="inl">ValueError: Invalid agent name: 'agentic-kag-starter'</code>. If the dropdown shows <code class="inl">agentic-kag-starter</code> (or a stale app keeps throwing 500s), you launched from the wrong place — press <code class="inl">Ctrl+C</code>, run <code class="inl">cd ~/agentic-kag-starter</code>, relaunch, then <b>hard-refresh</b> the ADK tab (<code class="inl">Ctrl+Shift+R</code>) to clear the cached selection.</div></div>
+      <div class="note warn"><div class="ic">!</div><div><b>Launch from the repo folder.</b> <code class="inl">adk web</code> only discovers agents in the directory you start it from, so always <code class="inl">cd ~/agentic-kag-starter</code> first. If the dropdown shows <code class="inl">agentic-kag-starter</code> instead of <code class="inl">kag_agent</code>, a stray <code class="inl">agent.py</code> is still at the repo root — redo step 4.1 with <code class="inl">mv</code> (not <code class="inl">cp</code>). If the dropdown is <b>empty</b>, you launched from the wrong folder (e.g. <code class="inl">~</code>). After fixing, <b>hard-refresh</b> the ADK tab (<code class="inl">Ctrl+Shift+R</code>). You'll also see a <code class="inl">docs</code> entry — that's the codelab folder; ignore it and pick <code class="inl">kag_agent</code>.</div></div>
+      <div class="note warn"><div class="ic">!</div><div><b>"Failed to create new session"?</b> The agent shows in the dropdown but clicking it errors. Two usual causes: <b>(1)</b> you launched without <code class="inl">--allow_origins "*"</code> — behind Cloud Shell's proxy ADK then returns <code class="inl">403 Forbidden</code> on the session request; add the flag and relaunch. <b>(2)</b> a tool failed to import, so the agent can't load — the real traceback is printed in the <b>terminal running <code class="inl">adk web</code></b>. Quick sanity check: <code class="inl">python -c "from kag_agent.agent import root_agent; print('ok')"</code> should print <code class="inl">ok</code>.</div></div>
       <p>Open <strong>Web Preview</strong> (top-right of Cloud Shell) on port <strong>8080</strong>. It opens the <strong>ADK dev UI</strong> in a new tab — the agent picker is the <strong>dropdown at the top-left of that page</strong>, not in the Web Preview menu. Choose <code class="inl">kag_agent</code> and try these:</p>
       {{TABLE_AGENT}}
       <p>The agent reasons about the <em>shape</em> of the question, calls a tool, and explains its choice. That's dynamic decision-making — it isn't hard-coded to one retrieval strategy.</p>
@@ -572,14 +581,19 @@ root_agent = Agent(
     tools=[query_graph, query_vectors],
 )`},
       {file:"Cloud Shell", lang:"bash", code:`mkdir kag_agent
-cp agent.py kag_agent/agent.py
+mv agent.py kag_agent/agent.py   # MOVE, not copy — a leftover root agent.py makes
+                                 # adk web serve the whole hyphenated repo folder
 echo "from .agent import root_agent" > kag_agent/__init__.py`},
       {file:"Cloud Shell", lang:"bash", code:`cd ~/agentic-kag-starter   # the folder that CONTAINS kag_agent/
-adk web --port 8080`},
+adk web --port 8080 --allow_origins "*"`},
       {file:"run_agent.py", lang:"python", code:`import sys, asyncio
 from google.adk.runners import InMemoryRunner
 from google.genai import types
-from agent import root_agent
+
+try:
+    from kag_agent.agent import root_agent   # after step 4.1 (wrapped in a package)
+except ModuleNotFoundError:
+    from agent import root_agent              # before step 4.1 (agent.py at repo root)
 
 DEFAULT_Q = "Who teaches the prerequisite for the course that uses PixelKit?"
 
