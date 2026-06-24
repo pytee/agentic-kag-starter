@@ -311,8 +311,8 @@ const STEPS = [
       <h3>1.5 — Add your credentials</h3>
       <p>The repo ships a <code class="inl">.env.example</code>. Copy it to <code class="inl">.env</code>:</p>
       {{CODE:5}}
-      <div class="note tip"><div class="ic">i</div><div><b>Don't panic if you can't see these files.</b> <code class="inl">.env.example</code> and <code class="inl">.env</code> start with a dot, so a plain <code class="inl">ls</code> hides them — use <code class="inl">ls -a</code> to confirm they're there. Also, <code class="inl">cp</code> runs <b>silently</b>: no output means it worked, and it does <b>not</b> open anything. The next command is what opens the file for editing. (If <code class="inl">ls -a</code> shows no <code class="inl">.env.example</code> at all, your clone is stale — run <code class="inl">git pull origin main</code>.)</div></div>
-      <p>Now open <code class="inl">.env</code> in the Cloud Editor and replace the placeholders with your project ID, region, and Neo4j credentials:</p>
+      <div class="note tip"><div class="ic">i</div><div><b>Don't panic if you can't see these files.</b> <code class="inl">.env.example</code> and <code class="inl">.env</code> start with a dot, so a plain <code class="inl">ls</code> hides them — use <code class="inl">ls -a</code> to confirm they're there. Also, <code class="inl">cp</code> runs <b>silently</b>: no output means it worked, and it does <b>not</b> open anything — the <code class="inl">cloudshell edit .env</code> line is what opens it in the editor. (If <code class="inl">ls -a</code> shows no <code class="inl">.env.example</code> at all, your clone is stale — run <code class="inl">git pull origin main</code>.) Editor tab not opening? Press <code class="inl">Ctrl+P</code> and type <code class="inl">.env</code>.</div></div>
+      <p>In the <code class="inl">.env</code> tab, replace the placeholders with your project ID, region, and Neo4j credentials:</p>
       {{CODE:6}}
       <div class="note warn"><div class="ic">!</div><div><b>Save the file — this is the #1 thing that trips people up.</b> Typing in the Cloud Editor does <b>not</b> save automatically. Hit <code class="inl">Ctrl-S</code> (Mac: <code class="inl">Cmd-S</code>) on the <code class="inl">.env</code> tab, or your edits are lost and the code keeps reading the <code class="inl">xxxxxxxx</code> placeholder — which later fails with <code class="inl">ServiceUnavailable: Failed to DNS resolve address xxxxxxxx.databases.neo4j.io</code>. Two more gotchas: make sure you edited <code class="inl">.env</code> and <b>not</b> <code class="inl">.env.example</code>, and confirm with <code class="inl">grep NEO4J .env</code> — it should show your <b>real</b> AuraDB host, not <code class="inl">xxxxxxxx.databases.neo4j.io</code>.</div></div>
       <p><code class="inl">config.py</code> (already in the repo) reads those values for the rest of the code — open it to see how:</p>
@@ -329,7 +329,8 @@ cd agentic-kag-starter`},
       {file:"Cloud Shell", lang:"bash", code:`# opens the Cloud Shell Editor on the cloned folder
 cloudshell edit .`},
       {file:"Cloud Shell", lang:"bash", code:`pip install -r requirements.txt`},
-      {file:"Cloud Shell", lang:"bash", code:`cp .env.example .env`},
+      {file:"Cloud Shell", lang:"bash", code:`cp .env.example .env   # copy the template (cp is silent — no output means success)
+cloudshell edit .env   # open the copy in the Cloud Editor`},
       {file:".env", lang:"bash", code:`# Vertex AI (Gemini)
 GOOGLE_GENAI_USE_VERTEXAI=1
 GOOGLE_CLOUD_PROJECT=your-project-id
