@@ -15,8 +15,13 @@ Shape:
 
 Rules:
 - Canonical names (e.g. "Dr. Lina Cheong", never "she").
-- Relations are short verbs: TEACHES, LEADS, BUILT, USES, STUDIED_AT,
-  PREREQUISITE_FOR, SUPERVISES, ALUMNUS_OF.
+- Use ONLY these relation types, spelled exactly, and never invent others:
+  TEACHES, LEADS, BUILT, USES, STUDIED_AT, PREREQUISITE_FOR, SUPERVISES, ALUMNUS_OF.
+- Direction is source -> target. Follow these patterns exactly:
+  Person TEACHES Course; Person LEADS Lab; Lab BUILT Tool; Course USES Tool;
+  Person STUDIED_AT University; Course PREREQUISITE_FOR Course;
+  Person SUPERVISES Person; Person ALUMNUS_OF University.
+- If a fact doesn't fit one of those patterns, leave it out.
 - Only facts stated in the text.
 
 TEXT:
