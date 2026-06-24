@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt to Pipeline — Build an Agentic KAG System on Vertex AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root, [data-theme="light"]{
+    --ink:#16181d; --paper:#fbfaf7; --panel:#ffffff;
+    --edge:#2f6df6; --edge-2:#00b3a4; --muted:#6b7280;
+    --code-bg:#0f1320; --code-ink:#e8ecf5; --line:#e7e3da;
+    --rail:#d9d4c8;
+    --prose:#3a3d44;            /* hero lede + body emphasis */
+    --panel-hover:#f5f3ee;      /* sidebar node hover, etc. */
+    --chip-bg:#eef0f4; --chip-ink:#1d3a8a;   /* inline code */
+    --th-bg:#f2efe8; --row-alt:#faf8f3;      /* tables */
+    --note-check-bg:#eafaf6; --note-check-bd:#bfeee4;
+    --note-tip-bg:#eef3ff;   --note-tip-bd:#cfddfb;
+    --note-warn-bg:#fff6ea;  --note-warn-bd:#f3dcb4; --note-warn-ic:#e08a00;
+    --topbar-bg:rgba(251,250,247,.86);
+    --display:"Space Grotesk",sans-serif; --body:"Inter",sans-serif; --mono:"JetBrains Mono",monospace;
+    --sidebar-w:300px;
+  }
+  [data-theme="dark"]{
+    --ink:#e9ecf2; --paper:#0d0f14; --panel:#14171f;
+    --edge:#5b8bff; --edge-2:#2dd4bf; --muted:#8b93a4;
+    --code-bg:#0a0c14; --code-ink:#e8ecf5; --line:#262b36;
+    --rail:#333a47;
+    --prose:#c2c7d2;
+    --panel-hover:#1b1f29;
+    --chip-bg:#1c2740; --chip-ink:#9db8ff;
+    --th-bg:#1a1e28; --row-alt:#11141c;
+    --note-check-bg:#0e2420; --note-check-bd:#1d5048;
+    --note-tip-bg:#121d33;   --note-tip-bd:#27406e;
+    --note-warn-bg:#241a0c;  --note-warn-bd:#5a4420; --note-warn-ic:#e0a64a;
+    --topbar-bg:rgba(13,15,20,.86);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+  body{font-family:var(--body);background:var(--paper);color:var(--ink);line-height:1.65;-webkit-font-smoothing:antialiased;transition:background .25s,color .25s}
+
+  /* ---------- Layout ---------- */
+  .shell{display:grid;grid-template-columns:var(--sidebar-w) 1fr;min-height:100vh}
+  .shell>div{min-width:0}
+
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40;display:none}
+  .scrim.show{display:block}
+
+  /* ---------- Sidebar: the knowledge-graph rail ---------- */
+  .sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--panel);
+    border-right:1px solid var(--line);padding:28px 22px 40px}
+  .brand{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.2px;line-height:1.3;margin-bottom:4px}
+  .brand .dot{color:var(--edge)}
+  .brand-sub{font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:22px}
+  .progress-meta{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:18px}
+  .progress-meta b{color:var(--edge);font-weight:700}
+
+  nav.graph{position:relative;margin-left:6px}
+  /* the vertical edge line connecting section nodes */
+  nav.graph::before{content:"";position:absolute;left:9px;top:14px;bottom:14px;width:2px;background:var(--rail);z-index:0}
+  nav.graph .edge-fill{position:absolute;left:9px;top:14px;width:2px;background:linear-gradient(var(--edge),var(--edge-2));z-index:0;height:0;transition:height .4s ease}
+  .nav-node{position:relative;z-index:1;display:flex;gap:13px;align-items:flex-start;
+    padding:9px 8px 9px 0;border:none;background:none;width:100%;text-align:left;cursor:pointer;
+    border-radius:8px;color:var(--ink);font-family:var(--body)}
+  .nav-node:hover{background:var(--panel-hover)}
+  .nav-node .pip{flex:0 0 auto;width:20px;height:20px;border-radius:50%;background:var(--panel);
+    border:2px solid var(--rail);display:grid;place-items:center;margin-top:1px;transition:.25s}
+  .nav-node .pip span{width:7px;height:7px;border-radius:50%;background:var(--rail);transition:.25s}
+  .nav-node.active .pip{border-color:var(--edge);box-shadow:0 0 0 4px rgba(47,109,246,.12)}
+  .nav-node.active .pip span{background:var(--edge)}
+  .nav-node.done .pip{border-color:var(--edge-2);background:var(--edge-2)}
+  .nav-node.done .pip span{background:#fff;width:9px;height:9px;
+    -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='white' d='M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'/%3E%3C/svg%3E") center/contain no-repeat;
+    mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='white' d='M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'/%3E%3C/svg%3E") center/contain no-repeat}
+  .nav-label{font-size:13.5px;font-weight:500;line-height:1.35}
+  .nav-num{font-family:var(--mono);font-size:10px;color:var(--muted);display:block;margin-bottom:1px;letter-spacing:.05em}
+  .nav-time{font-family:var(--mono);font-size:10px;color:var(--muted)}
+
+  .reset{margin-top:24px;font-family:var(--mono);font-size:11px;color:var(--muted);background:none;border:1px solid var(--line);
+    padding:7px 11px;border-radius:7px;cursor:pointer;width:100%}
+  .reset:hover{border-color:var(--edge);color:var(--edge)}
+
+  /* ---------- Main ---------- */
+  main{max-width:860px;margin:0 auto;padding:0 40px}
+  .topbar{position:sticky;top:0;background:var(--topbar-bg);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);padding:14px 40px;margin:0 -40px 0;z-index:20;display:flex;
+    align-items:center;justify-content:space-between}
+  .topbar .barbar{height:5px;background:var(--line);border-radius:99px;flex:1;margin-right:18px;overflow:hidden}
+  .topbar .barbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--edge),var(--edge-2));transition:width .4s}
+  .topbar .pct{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+  .theme-btn{margin-left:14px;flex:0 0 auto;width:34px;height:34px;border-radius:9px;border:1px solid var(--line);
+    background:var(--panel);color:var(--ink);cursor:pointer;display:grid;place-items:center;transition:.18s}
+  .theme-btn:hover{border-color:var(--edge);color:var(--edge)}
+  .theme-btn .ic-moon{display:none}
+  [data-theme="dark"] .theme-btn .ic-sun{display:none}
+  [data-theme="dark"] .theme-btn .ic-moon{display:block}
+  .menu-btn{display:none}
+
+  /* hero */
+  .hero{padding:64px 0 38px;border-bottom:1px solid var(--line)}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--edge);margin-bottom:18px;display:flex;align-items:center;gap:10px}
+  .eyebrow::before{content:"";width:26px;height:2px;background:var(--edge)}
+  h1.title{font-family:var(--display);font-weight:700;font-size:46px;line-height:1.05;letter-spacing:-.02em;margin-bottom:18px}
+  h1.title .accent{color:var(--edge)}
+  .lede{font-size:18px;color:var(--prose);max-width:680px}
+  .meta-chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+  .chip{font-family:var(--mono);font-size:12px;padding:7px 13px;border:1px solid var(--line);border-radius:99px;background:var(--panel);color:var(--prose)}
+  .chip b{color:var(--edge-2);font-weight:700}
+
+  /* sections */
+  section.step{padding:54px 0;border-bottom:1px solid var(--line);scroll-margin-top:72px}
+  .step-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px}
+  .step-kicker{font-family:var(--mono);font-size:12px;color:var(--edge);letter-spacing:.05em}
+  .step-clock{font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:auto}
+  h2.step-title{font-family:var(--display);font-weight:700;font-size:30px;letter-spacing:-.015em;line-height:1.15}
+  h3{font-family:var(--display);font-weight:600;font-size:19px;margin:30px 0 12px;letter-spacing:-.01em}
+  h4{font-family:var(--display);font-weight:600;font-size:15px;margin:22px 0 8px;color:var(--prose)}
+  p{margin:13px 0;font-size:15.5px}
+  ul,ol{margin:13px 0 13px 4px;padding-left:22px}
+  li{margin:7px 0;font-size:15.5px}
+  a{color:var(--edge);text-decoration:none;border-bottom:1px solid rgba(47,109,246,.3)}
+  a:hover{border-color:var(--edge)}
+  strong{font-weight:600}
+  code.inl{font-family:var(--mono);font-size:.88em;background:var(--chip-bg);color:var(--chip-ink);padding:2px 6px;border-radius:5px}
+
+  /* callouts */
+  .note{display:flex;gap:13px;padding:16px 18px;border-radius:11px;margin:20px 0;font-size:14.5px;line-height:1.6}
+  .note .ic{flex:0 0 auto;width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:13px;margin-top:1px}
+  .note.check{background:var(--note-check-bg);border:1px solid var(--note-check-bd)}
+  .note.check .ic{background:var(--edge-2);color:#fff}
+  .note.tip{background:var(--note-tip-bg);border:1px solid var(--note-tip-bd)}
+  .note.tip .ic{background:var(--edge);color:#fff}
+  .note.warn{background:var(--note-warn-bg);border:1px solid var(--note-warn-bd)}
+  .note.warn .ic{background:var(--note-warn-ic);color:#fff}
+  .note b{font-weight:600}
+
+  /* code blocks */
+  .code{position:relative;margin:18px 0;border-radius:11px;overflow:hidden;border:1px solid #232a3d;background:var(--code-bg)}
+  .code-top{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;background:#0b0e18;border-bottom:1px solid #1c2233}
+  .code-file{font-family:var(--mono);font-size:11.5px;color:#8b93a7}
+  .code-file .lang{color:var(--edge);margin-right:8px}
+  .copy-btn{font-family:var(--mono);font-size:11px;color:#aeb6c8;background:#1a2032;border:1px solid #2a3148;
+    padding:5px 11px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:.18s}
+  .copy-btn:hover{background:#222a40;color:#fff}
+  .copy-btn.copied{background:var(--edge-2);border-color:var(--edge-2);color:#062a25}
+  pre{margin:0;padding:16px 18px;overflow-x:auto}
+  pre code{font-family:var(--mono);font-size:13px;line-height:1.7;color:var(--code-ink);white-space:pre;display:block}
+  /* tiny syntax tint via spans we inject */
+  .tok-c{color:#6b7894;font-style:italic}      /* comment */
+  .tok-s{color:#9ae6b4}                          /* string */
+  .tok-k{color:#79a9ff}                          /* keyword */
+  .tok-f{color:#e3b341}                          /* function/def name */
+  .tok-n{color:#f0a8c0}                          /* number */
+  .code-cap{font-size:13px;color:var(--muted);margin:-6px 0 18px;padding-left:2px}
+
+  /* tables */
+  .twrap{overflow-x:auto;margin:20px 0}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
+  th{background:var(--th-bg);font-family:var(--display);font-weight:600;font-size:13px}
+  tbody tr:nth-child(even){background:var(--row-alt)}
+  td .win{color:var(--edge-2);font-weight:600}
+  td .lose{color:#b06a00}
+
+  /* ascii / diagram block */
+  .ascii{background:#0f1320;color:#aeb6c8;font-family:var(--mono);font-size:12.5px;line-height:1.5;
+    padding:20px;border-radius:11px;overflow-x:auto;margin:20px 0;border:1px solid #232a3d;white-space:pre}
+  .ascii .hi{color:var(--edge)}
+  .ascii .hi2{color:var(--edge-2)}
+
+  /* mark complete button */
+  .complete-row{display:flex;align-items:center;gap:14px;margin-top:30px;flex-wrap:wrap}
+  .mark-btn{font-family:var(--display);font-weight:600;font-size:14px;padding:11px 20px;border-radius:9px;
+    border:1.5px solid var(--edge);background:var(--edge);color:#fff;cursor:pointer;transition:.2s}
+  .mark-btn:hover{filter:brightness(1.07)}
+  .mark-btn.is-done{background:var(--edge-2);border-color:var(--edge-2)}
+  .mark-hint{font-family:var(--mono);font-size:12px;color:var(--muted)}
+
+  /* footer */
+  footer{padding:50px 0 80px;color:var(--muted);font-size:13.5px}
+  footer .fmono{font-family:var(--mono);font-size:12px}
+
+  /* mobile */
+  @media(max-width:880px){
+    .shell{grid-template-columns:1fr}
+    .sidebar{position:fixed;left:0;top:0;z-index:50;width:84%;max-width:330px;transform:translateX(-104%);transition:transform .28s;box-shadow:0 0 40px rgba(0,0,0,.18)}
+    .sidebar.open{transform:translateX(0)}
+    .menu-btn{display:grid;place-items:center;width:38px;height:38px;border-radius:9px;border:1px solid var(--line);background:var(--panel);cursor:pointer}
+    main{padding:0 22px}
+    .topbar{padding:11px 22px;margin:0 -22px 0}
+    h1.title{font-size:34px}
+    .hero{padding:40px 0 30px}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">Prompt&nbsp;to&nbsp;Pipeline<span class="dot">.</span></div>
+    <div class="brand-sub">Agentic KAG · Vertex AI</div>
+    <div class="progress-meta"><b id="doneCount">0</b> / 7 steps complete</div>
+    <nav class="graph" id="nav">
+      <div class="edge-fill" id="edgeFill"></div>
+      <!-- nodes injected by JS -->
+    </nav>
+    <button class="reset" id="resetBtn">↺ reset progress</button>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <!-- ===================== MAIN ===================== -->
+  <div>
+  <div class="topbar">
+    <button class="menu-btn" id="menuBtn" aria-label="Open menu">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16181d" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </button>
+    <div class="barbar"><i id="topFill"></i></div>
+    <div class="pct" id="topPct">0%</div>
+    <button class="theme-btn" id="themeBtn" aria-label="Toggle dark mode" title="Toggle theme">
+      <svg class="ic-sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="ic-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </div>
+
+  <main>
+    <!-- HERO -->
+    <div class="hero">
+      <div class="eyebrow">University Codelab · ~2 hours</div>
+      <h1 class="title">Build an Agentic <span class="accent">KAG</span> System on Vertex AI</h1>
+      <p class="lede">Go from plain paragraphs to an AI agent that reasons over a <strong>knowledge graph</strong>, falls back to <strong>vector search</strong> when it makes sense, and shows its work — built on Gemini, Neo4j, ChromaDB, and Google's Agent Development Kit.</p>
+      <div class="meta-chips">
+        <span class="chip">Stack: <b>Vertex AI · Gemini 2.5</b></span>
+        <span class="chip">Graph: <b>Neo4j AuraDB</b></span>
+        <span class="chip">Agent: <b>Google ADK</b></span>
+        <span class="chip">Level: <b>Intermediate</b></span>
+        <span class="chip"><b>Free-tier</b> friendly</span>
+      </div>
+    </div>
+
+    <!-- content injected here -->
+    <div id="content"></div>
+
+    <footer>
+      <div class="fmono">// end of codelab</div>
+      <p>Built for hands-on university workshops. Swap the sample corpus for your own domain and the whole pipeline still works — that's the point.</p>
+    </footer>
+  </main>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   SAFE STORAGE — localStorage when available, no-op in sandboxed previews
+===================================================================== */
+function safeGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
+function safeSet(key,val){ try{ localStorage.setItem(key,val); }catch(e){} }
+function safeDel(key){ try{ localStorage.removeItem(key); }catch(e){} }
+
+/* =====================================================================
+   CONTENT MODEL — each step is data; we render it to HTML.
+   Code blocks carry {file, lang, code}. Everything is copy-paste ready.
+===================================================================== */
+const STEPS = [
+  {
+    id:"concept", num:"00", time:"15 min", nav:"The big idea: RAG vs KAG",
+    title:"The Big Idea — RAG vs KAG",
+    html:`
+      <p>Imagine a library. <strong>RAG</strong> (Retrieval-Augmented Generation) is like asking a librarian to hand you the pages that <em>sound most like your question</em>. It measures similarity between your question and chunks of text, then lets the AI read those chunks and answer.</p>
+      <p>That works great for "What does the syllabus say about late submissions?" — the answer sits in one passage. It fails for "Which professors who taught my failed courses also supervise final-year projects?" because that answer is <strong>spread across many places</strong> and requires <em>connecting</em> facts. Text similarity has no idea two paragraphs are related.</p>
+      <p><strong>KAG</strong> (Knowledge-Augmented Generation) is like having a librarian who has already drawn a <strong>map of how everything connects</strong>. Instead of grabbing similar-sounding pages, it <em>walks the connections</em>. That map is a <strong>knowledge graph</strong>: entities are nodes, relationships are edges.</p>
+      <h3>Side by side</h3>
+      {{TABLE_COMPARE}}
+      <h3>The takeaway</h3>
+      <p>Neither wins outright. The smart design — and what you'll build today — is an <strong>agent</strong> that reads the question and picks the right tool: the graph for relational questions, vector search for fuzzy ones. That's <strong>Agentic KAG</strong>.</p>
+      {{ASCII_FLOW}}
+    `,
+    code:[]
+  },
+  {
+    id:"setup", num:"01", time:"20 min", nav:"Setup: Vertex AI + AuraDB",
+    title:"Setup — Vertex AI & Neo4j AuraDB",
+    html:`
+      <p>We'll work in <strong>Google Cloud Shell</strong> so nobody fights local installs — everything runs in the browser. Cloud Shell already ships <strong>Python 3.12</strong> (this codelab needs 3.10+) and your Google Cloud login, so there's nothing to install or authenticate by hand. You'll pull the starter code straight from <strong>GitHub</strong> into Cloud Shell, then edit it in the built-in <strong>Cloud Shell Editor</strong>.</p>
+      <h3>1.1 — Open Cloud Shell & enable Vertex AI</h3>
+      <p>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noopener">console.cloud.google.com</a>, select a project, and open <strong>Cloud Shell</strong> (terminal icon, top-right). Then:</p>
+      {{CODE:0}}
+      <p>Record your project ID and region — you'll reuse them everywhere:</p>
+      {{CODE:1}}
+      <div class="note tip"><div class="ic">i</div><div><b>Already signed in.</b> Cloud Shell is pre-authenticated, so the Vertex AI client libraries pick up your credentials automatically — no <code class="inl">gcloud auth</code> step needed. <i>Running locally instead? Run <code class="inl">gcloud auth application-default login</code> once.</i></div></div>
+      <h3>1.2 — Pull the starter code from GitHub</h3>
+      <p>Clone the repo into your Cloud Shell home directory and step into it:</p>
+      {{CODE:2}}
+      <p>Now open the <strong>Cloud Shell Editor</strong> so every file is in front of you, ready to edit:</p>
+      {{CODE:3}}
+      <div class="note tip"><div class="ic">i</div><div>You can also click <b>Open Editor</b> in the Cloud Shell toolbar (top-right). The <code class="inl">agentic-kag-starter</code> folder appears in the file tree on the left. Every file referenced in the steps below is <b>already there</b> — open it, read along, and tweak it live. Get back to the command line any time with <b>Open Terminal</b>.</div></div>
+      <h3>1.3 — Get a free Neo4j AuraDB instance</h3>
+      <ul>
+        <li>Sign up at <a href="https://console.neo4j.io" target="_blank" rel="noopener">console.neo4j.io</a> (free).</li>
+        <li>Create a new <strong>AuraDB Free</strong> instance.</li>
+        <li><strong>Download the credentials file when prompted</strong> — the URI and password are shown only once.</li>
+      </ul>
+      <p>You'll get a URI like <code class="inl">neo4j+s://xxxxxxxx.databases.neo4j.io</code>.</p>
+      <h3>1.4 — Install the Python packages</h3>
+      <p>The repo lists everything it needs in <code class="inl">requirements.txt</code> — install it in one shot:</p>
+      {{CODE:4}}
+      <h3>1.5 — Add your credentials</h3>
+      <p>The repo ships a <code class="inl">.env.example</code>. Copy it to <code class="inl">.env</code>:</p>
+      {{CODE:5}}
+      <div class="note tip"><div class="ic">i</div><div><b>Don't panic if you can't see these files.</b> <code class="inl">.env.example</code> and <code class="inl">.env</code> start with a dot, so a plain <code class="inl">ls</code> hides them — use <code class="inl">ls -a</code> to confirm they're there. Also, <code class="inl">cp</code> runs <b>silently</b>: no output means it worked, and it does <b>not</b> open anything — the <code class="inl">cloudshell edit .env</code> line is what opens it in the editor. (If <code class="inl">ls -a</code> shows no <code class="inl">.env.example</code> at all, your clone is stale — run <code class="inl">git pull origin main</code>.) Editor tab not opening? Press <code class="inl">Ctrl+P</code> and type <code class="inl">.env</code>.</div></div>
+      <p>In the <code class="inl">.env</code> tab, replace the placeholders with your project ID, region, and Neo4j credentials:</p>
+      {{CODE:6}}
+      <div class="note warn"><div class="ic">!</div><div><b>Save the file — this is the #1 thing that trips people up.</b> Typing in the Cloud Editor does <b>not</b> save automatically. Hit <code class="inl">Ctrl-S</code> (Mac: <code class="inl">Cmd-S</code>) on the <code class="inl">.env</code> tab, or your edits are lost and the code keeps reading the <code class="inl">xxxxxxxx</code> placeholder — which later fails with <code class="inl">ServiceUnavailable: Failed to DNS resolve address xxxxxxxx.databases.neo4j.io</code>. Two more gotchas: make sure you edited <code class="inl">.env</code> and <b>not</b> <code class="inl">.env.example</code>, and confirm with <code class="inl">grep NEO4J .env</code> — it should show your <b>real</b> AuraDB host, not <code class="inl">xxxxxxxx.databases.neo4j.io</code>.</div></div>
+      <p><code class="inl">config.py</code> (already in the repo) reads those values for the rest of the code — open it to see how:</p>
+      {{CODE:7}}
+      <div class="note check"><div class="ic">✓</div><div><b>Checkpoint.</b> From the <code class="inl">agentic-kag-starter</code> folder, check <b>both</b> values the code depends on:<br><code class="inl">python -c "import config; print(config.PROJECT); print(config.NEO4J_URI)"</code><br>You should see your <b>real</b> project ID and your <b>real</b> AuraDB host. If either still shows a placeholder — <code class="inl">your-project-id</code> or <code class="inl">xxxxxxxx.databases.neo4j.io</code> — you're not done: re-edit <code class="inl">.env</code>, <b>save it</b> (<code class="inl">Ctrl-S</code>), and run this again. Catching it here saves you a confusing crash in step 02.</div></div>
+    `,
+    code:[
+      {file:"Cloud Shell", lang:"bash", code:`gcloud services enable aiplatform.googleapis.com`},
+      {file:"Cloud Shell", lang:"bash", code:`export GOOGLE_CLOUD_PROJECT=$(gcloud config get-value project)
+export GOOGLE_CLOUD_LOCATION=us-central1
+echo $GOOGLE_CLOUD_PROJECT`},
+      {file:"Cloud Shell", lang:"bash", code:`git clone https://github.com/pytee/agentic-kag-starter.git
+cd agentic-kag-starter`},
+      {file:"Cloud Shell", lang:"bash", code:`# opens the Cloud Shell Editor on the cloned folder
+cloudshell edit .`},
+      {file:"Cloud Shell", lang:"bash", code:`pip install -r requirements.txt`},
+      {file:"Cloud Shell", lang:"bash", code:`cp .env.example .env   # copy the template (cp is silent — no output means success)
+cloudshell edit .env   # open the copy in the Cloud Editor`},
+      {file:".env", lang:"bash", code:`# Vertex AI (Gemini)
+GOOGLE_GENAI_USE_VERTEXAI=1
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_LOCATION=us-central1
+
+# Neo4j AuraDB
+NEO4J_URI=neo4j+s://xxxxxxxx.databases.neo4j.io
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your-aura-password`},
+      {file:"config.py", lang:"python", code:`import os
+from dotenv import load_dotenv
+load_dotenv()
+
+PROJECT = os.environ["GOOGLE_CLOUD_PROJECT"]
+LOCATION = os.environ["GOOGLE_CLOUD_LOCATION"]
+GEMINI_MODEL = "gemini-2.5-flash-lite"   # cheapest current model, ideal for a workshop
+# (gemini-2.0-flash was deprecated 2026-06-01. If a model string fails, list
+#  what's live: gcloud ai models list --region=$GOOGLE_CLOUD_LOCATION)
+
+NEO4J_URI = os.environ["NEO4J_URI"]
+NEO4J_USERNAME = os.environ["NEO4J_USERNAME"]
+NEO4J_PASSWORD = os.environ["NEO4J_PASSWORD"]`}
+    ]
+  },
+  {
+    id:"graph", num:"02", time:"30 min", nav:"Build the knowledge graph",
+    title:"Build the Knowledge Graph",
+    html:`
+      <h3>2.1 — The sample data</h3>
+      <p>Open <code class="inl">corpus.py</code> from the file tree. It's a tiny campus dataset with a <strong>hidden chain of connections</strong> no single sentence states outright.</p>
+      {{CODE:0}}
+      <p>The hidden multi-hop chain: <em>Machine Learning (taught by Lina) → prerequisite for → Robotics (taught by Omar) → uses → PixelKit → built by → Vision Lab → led by → Lina.</em> Save this question for later: <strong>"Who teaches the prerequisite for the course that uses PixelKit?"</strong></p>
+      <h3>2.2 — Extract entities & relationships with Gemini</h3>
+      <p>Open <code class="inl">extract.py</code>. We ask Gemini to return typed triples as JSON.</p>
+      {{CODE:1}}
+      <h3>2.3 — Load the triples into Neo4j</h3>
+      <p>Open <code class="inl">build_graph.py</code> to see how it loads the triples, then run it:</p>
+      {{CODE:2}}
+      {{CODE:3}}
+      <div class="note check"><div class="ic">✓</div><div><b>Checkpoint — the payoff.</b> Open your AuraDB console → <b>Query</b>, and run <code class="inl">MATCH (n)-[r]->(m) RETURN n,r,m</code>. Your three paragraphs are now a visual network of nodes and edges. Screenshot it — this is the moment KAG clicks.</div></div>
+      <h3>2.4 — Query the graph in plain English</h3>
+      <p>Open <code class="inl">graph_tool.py</code>. Gemini writes Cypher (Neo4j's query language) from a question, we run it, and return the result. Notice <code class="inl">_live_schema()</code>: instead of hardcoding the relationship names, it reads them back from the graph at query time.</p>
+      {{CODE:4}}
+      <div class="note tip"><div class="ic">i</div><div><b>Why read the schema live?</b> Building the graph used Gemini to <b>extract</b> triples, and that's non-deterministic — the same sentence ("Robotics uses PixelKit") might come out as <code class="inl">USED_IN</code> with the direction flipped, or as a slightly different verb. A hardcoded schema then promises a <code class="inl">USES</code> edge that doesn't exist, Gemini writes valid-looking Cypher against it, and you get an empty <code class="inl">Result: []</code> plus a <code class="inl">relationship type ... does not exist</code> warning. Feeding the <b>real</b> relationship names and edges into the prompt keeps the query grounded in what was actually built. <i>Seeing an empty result anyway? Run <code class="inl">MATCH (a)-[r]->(b) RETURN a.name, type(r), b.name</code> in the AuraDB console to see the names your extraction produced.</i></div></div>
+      <p>Test the multi-hop power directly:</p>
+      {{CODE:5}}
+      <p>Watch it traverse PixelKit → Robotics → (prerequisite) Machine Learning → Dr. Lina Cheong. That's a 3-hop join no vector search can do reliably.</p>
+    `,
+    code:[
+      {file:"corpus.py", lang:"python", code:`DOCUMENTS = [
+    {
+        "id": "doc1",
+        "text": (
+            "Dr. Lina Cheong teaches Machine Learning at Summit University. "
+            "She leads the Vision Lab and supervises final-year projects. "
+            "Lina completed her PhD at Coastal Tech in 2015."
+        ),
+    },
+    {
+        "id": "doc2",
+        "text": (
+            "The Vision Lab built an open-source library called PixelKit. "
+            "PixelKit is used in the Robotics course taught by Dr. Omar Faiz. "
+            "Omar also studied at Coastal Tech."
+        ),
+    },
+    {
+        "id": "doc3",
+        "text": (
+            "Coastal Tech is a research university known for computer vision. "
+            "Its most cited alumnus is Dr. Lina Cheong. "
+            "The Robotics course at Summit University requires Machine Learning "
+            "as a prerequisite."
+        ),
+    },
+]`},
+      {file:"extract.py", lang:"python", code:`import json, vertexai
+from vertexai.generative_models import GenerativeModel
+from config import PROJECT, LOCATION, GEMINI_MODEL
+
+vertexai.init(project=PROJECT, location=LOCATION)
+model = GenerativeModel(GEMINI_MODEL)
+
+PROMPT = """Extract a knowledge graph from the text as JSON only (no markdown).
+Shape:
+{{"entities":[{{"name":"...","type":"Person|Course|Lab|Tool|University"}}],
+ "relationships":[{{"source":"...","relation":"UPPER_SNAKE","target":"..."}}]}}
+
+Rules:
+- Canonical names (e.g. "Dr. Lina Cheong", never "she").
+- Use ONLY these relation types, spelled exactly, and never invent others:
+  TEACHES, LEADS, BUILT, USES, STUDIED_AT, PREREQUISITE_FOR, SUPERVISES, ALUMNUS_OF.
+- Direction is source -> target. Follow these patterns exactly:
+  Person TEACHES Course; Person LEADS Lab; Lab BUILT Tool; Course USES Tool;
+  Person STUDIED_AT University; Course PREREQUISITE_FOR Course;
+  Person SUPERVISES Person; Person ALUMNUS_OF University.
+- If a fact doesn't fit one of those patterns, leave it out.
+- Only facts stated in the text.
+
+TEXT:
+{text}"""
+
+def extract(text: str) -> dict:
+    resp = model.generate_content(PROMPT.format(text=text))
+    raw = resp.text.strip().removeprefix("\`\`\`json").removeprefix("\`\`\`").removesuffix("\`\`\`").strip()
+    return json.loads(raw)`},
+      {file:"build_graph.py", lang:"python", code:`from neo4j import GraphDatabase
+from config import NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD
+from corpus import DOCUMENTS
+from extract import extract
+
+driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
+
+def build():
+    with driver.session() as s:
+        s.run("MATCH (n) DETACH DELETE n")            # start clean
+        for doc in DOCUMENTS:
+            g = extract(doc["text"])
+            for e in g["entities"]:
+                s.run("MERGE (n:Entity {name:$n}) SET n.type=$t",
+                      n=e["name"], t=e["type"])
+            for r in g["relationships"]:
+                rel = "".join(c for c in r["relation"] if c.isalnum() or c=="_").upper()
+                s.run(f"MATCH (a:Entity {{name:$s}}),(b:Entity {{name:$t}}) "
+                      f"MERGE (a)-[:{rel}]->(b)", s=r["source"], t=r["target"])
+            print(f"  loaded {doc['id']}")
+
+if __name__ == "__main__":
+    build()
+    print("Done. In the Neo4j console run: MATCH (n)-[r]->(m) RETURN n,r,m")`},
+      {file:"Cloud Shell", lang:"bash", code:`python build_graph.py`},
+      {file:"graph_tool.py", lang:"python", code:`import vertexai
+from vertexai.generative_models import GenerativeModel
+from neo4j import GraphDatabase
+from config import (PROJECT, LOCATION, GEMINI_MODEL,
+                    NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
+
+vertexai.init(project=PROJECT, location=LOCATION)
+_model = GenerativeModel(GEMINI_MODEL)
+_driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
+
+CYPHER_PROMPT = """Given this Neo4j schema:
+{schema}
+Write ONE Cypher query answering the question. Return ONLY the query, no markdown.
+Question: {q}"""
+
+def _live_schema() -> str:
+    # LLM extraction is non-deterministic (it may emit USED_IN instead of USES,
+    # or flip a direction), so read the REAL names + edges from the live graph
+    # instead of hardcoding a schema that quietly drifts out of sync.
+    with _driver.session() as s:
+        rels = [r["relationshipType"] for r in s.run("CALL db.relationshipTypes()")]
+        edges = [f'{r["a"]} -[:{r["rel"]}]-> {r["b"]}'
+                 for r in s.run("MATCH (a)-[r]->(b) "
+                                "RETURN a.name AS a, type(r) AS rel, b.name AS b LIMIT 40")]
+    return ("Nodes are (:Entity {name, type}); match nodes by their name.\\n"
+            f"Relationship types: {', '.join(rels)}\\n"
+            "Actual edges (use these exact names AND directions):\\n"
+            + "\\n".join(edges))
+
+def query_graph(question: str) -> str:
+    """Answer relational questions by querying the Neo4j knowledge graph."""
+    resp = _model.generate_content(CYPHER_PROMPT.format(schema=_live_schema(), q=question))
+    cypher = resp.text.strip().removeprefix("\`\`\`cypher").removeprefix("\`\`\`").removesuffix("\`\`\`").strip()
+    with _driver.session() as s:
+        rows = [r.data() for r in s.run(cypher)]
+    return f"Cypher: {cypher}\\nResult: {rows}"`},
+      {file:"Cloud Shell", lang:"bash", code:`python -c "from graph_tool import query_graph; print(query_graph('Who teaches the prerequisite for the course that uses PixelKit?'))"`}
+    ]
+  },
+  {
+    id:"vector", num:"03", time:"15 min", nav:"The vector baseline",
+    title:"The Vector Baseline (Chroma)",
+    html:`
+      <p>Now build the thing KAG competes with, so the contrast is real. Open <code class="inl">vector_tool.py</code> — it embeds the same paragraphs with Vertex AI embeddings and retrieves by similarity.</p>
+      {{CODE:0}}
+      <p>Compare the two tools on the <strong>same hard question</strong>:</p>
+      {{CODE:1}}
+      <div class="note tip"><div class="ic">i</div><div>Vector search returns the chunks that <b>mention</b> these things, but it can't <b>assert the chain</b>. On three documents it sometimes squeaks by; on three thousand, the relevant pieces get buried. <b>The graph guarantees the join; the vector store only hopes for it.</b> Make sure students run both — this comparison is the heart of the workshop.</div></div>
+    `,
+    code:[
+      {file:"vector_tool.py", lang:"python", code:`import chromadb
+import vertexai
+from vertexai.language_models import TextEmbeddingModel
+from corpus import DOCUMENTS
+from config import PROJECT, LOCATION
+
+# Use the same vertexai SDK as graph_tool — it authenticates cleanly in Cloud
+# Shell. LangChain's VertexAIEmbeddings routes through the google.genai client,
+# which fails here with "service account info is missing 'email' field".
+vertexai.init(project=PROJECT, location=LOCATION)
+_embed_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
+
+def _embed(texts):
+    return [e.values for e in _embed_model.get_embeddings(texts)]
+
+_client = chromadb.Client()
+_collection = _client.get_or_create_collection("corpus")
+
+# index once at import
+_collection.upsert(
+    ids=[d["id"] for d in DOCUMENTS],
+    documents=[d["text"] for d in DOCUMENTS],
+    embeddings=_embed([d["text"] for d in DOCUMENTS]),
+)
+
+def query_vectors(question: str) -> str:
+    """Answer fuzzy/descriptive questions by semantic similarity search."""
+    qvec = _embed([question])[0]
+    res = _collection.query(query_embeddings=[qvec], n_results=2)
+    return "\\n---\\n".join(res["documents"][0])`},
+      {file:"Cloud Shell", lang:"bash", code:`python -c "from vector_tool import query_vectors; print(query_vectors('Who teaches the prerequisite for the course that uses PixelKit?'))"`}
+    ]
+  },
+  {
+    id:"agent", num:"04", time:"25 min", nav:"The agent that chooses",
+    title:"The Agent That Chooses",
+    html:`
+      <p>Now give Gemini <strong>both</strong> tools and let it decide which to use per question, using Google's <strong>Agent Development Kit (ADK)</strong>. Open <code class="inl">agent.py</code>.</p>
+      {{CODE:0}}
+      <h3>4.1 — Make the agent discoverable by <code class="inl">adk web</code></h3>
+      <p>ADK's web UI only lists agents that live in their own <strong>package folder</strong> — a directory with an <code class="inl">__init__.py</code> that exposes <code class="inl">root_agent</code>. The repo ships <code class="inl">agent.py</code> at the root, so wrap it in a <code class="inl">kag_agent/</code> package first. Note the <code class="inl">mv</code> below: <b>move</b> <code class="inl">agent.py</code> into the package, don't copy it. If a stray <code class="inl">agent.py</code> is left at the repo root, <code class="inl">adk web</code> treats the <b>whole folder</b> as one agent named after it (<code class="inl">agentic-kag-starter</code>) — and the hyphens make it un-loadable, so <code class="inl">kag_agent</code> never shows up. Run this from the repo folder:</p>
+      {{CODE:1}}
+      <h3>4.2 — Launch the dev UI</h3>
+      <p>Start the UI on port <strong>8080</strong> so it lines up with Cloud Shell's Web Preview. The <code class="inl">--allow_origins "*"</code> flag is required — Web Preview serves the UI through a proxied <code class="inl">…cloudshell.dev</code> URL, and without it ADK rejects the session request:</p>
+      {{CODE:2}}
+      <div class="note warn"><div class="ic">!</div><div><b>Port matters.</b> <code class="inl">adk web</code> defaults to port <b>8000</b>, but Cloud Shell's <b>Web Preview</b> opens port <b>8080</b>. The <code class="inl">--port 8080</code> above makes them match — otherwise you'll get a blank page. (Alternatively, leave the default and use Web Preview → <b>Change port → 8000</b>.)</div></div>
+      <div class="note warn"><div class="ic">!</div><div><b>Launch from the repo folder.</b> <code class="inl">adk web</code> only discovers agents in the directory you start it from, so always <code class="inl">cd ~/agentic-kag-starter</code> first. If the dropdown shows <code class="inl">agentic-kag-starter</code> instead of <code class="inl">kag_agent</code>, a stray <code class="inl">agent.py</code> is still at the repo root — redo step 4.1 with <code class="inl">mv</code> (not <code class="inl">cp</code>). If the dropdown is <b>empty</b>, you launched from the wrong folder (e.g. <code class="inl">~</code>). After fixing, <b>hard-refresh</b> the ADK tab (<code class="inl">Ctrl+Shift+R</code>). You'll also see a <code class="inl">docs</code> entry — that's the codelab folder; ignore it and pick <code class="inl">kag_agent</code>.</div></div>
+      <div class="note warn"><div class="ic">!</div><div><b>"Failed to create new session"?</b> The agent shows in the dropdown but clicking it errors. Two usual causes: <b>(1)</b> you launched without <code class="inl">--allow_origins "*"</code> — behind Cloud Shell's proxy ADK then returns <code class="inl">403 Forbidden</code> on the session request; add the flag and relaunch. <b>(2)</b> a tool failed to import, so the agent can't load — the real traceback is printed in the <b>terminal running <code class="inl">adk web</code></b>. Quick sanity check: <code class="inl">python -c "from kag_agent.agent import root_agent; print('ok')"</code> should print <code class="inl">ok</code>.</div></div>
+      <p>Open <strong>Web Preview</strong> (top-right of Cloud Shell) on port <strong>8080</strong>. It opens the <strong>ADK dev UI</strong> in a new tab — the agent picker is the <strong>dropdown at the top-left of that page</strong>, not in the Web Preview menu. Choose <code class="inl">kag_agent</code> and try these:</p>
+      {{TABLE_AGENT}}
+      <p>The agent reasons about the <em>shape</em> of the question, calls a tool, and explains its choice. That's dynamic decision-making — it isn't hard-coded to one retrieval strategy.</p>
+      <div class="note tip"><div class="ic">i</div><div><b>No-UI fallback.</b> If Web Preview is fiddly in your lab, skip it entirely — the repo ships a headless runner. Run <code class="inl">python run_agent.py</code> (or pass your own question: <code class="inl">python run_agent.py "Who leads the Vision Lab?"</code>). Here's what it does:</div></div>
+      {{CODE:3}}
+    `,
+    code:[
+      {file:"agent.py", lang:"python", code:`from google.adk.agents import Agent
+from config import GEMINI_MODEL
+from graph_tool import query_graph
+from vector_tool import query_vectors
+
+root_agent = Agent(
+    name="kag_agent",
+    model=GEMINI_MODEL,
+    instruction=(
+        "You answer questions about a university using two tools.\\n"
+        "- Use query_graph for questions about RELATIONSHIPS or chains: who "
+        "teaches/leads/built what, prerequisites, multi-step connections, counting.\\n"
+        "- Use query_vectors for FUZZY or DESCRIPTIVE questions where the answer "
+        "is likely written in a passage.\\n"
+        "Choose deliberately. State which tool you used and why, then give the answer."
+    ),
+    tools=[query_graph, query_vectors],
+)`},
+      {file:"Cloud Shell", lang:"bash", code:`mkdir kag_agent
+mv agent.py kag_agent/agent.py   # MOVE, not copy — a leftover root agent.py makes
+                                 # adk web serve the whole hyphenated repo folder
+echo "from .agent import root_agent" > kag_agent/__init__.py`},
+      {file:"Cloud Shell", lang:"bash", code:`cd ~/agentic-kag-starter   # the folder that CONTAINS kag_agent/
+adk web --port 8080 --allow_origins "*"`},
+      {file:"run_agent.py", lang:"python", code:`import sys, asyncio
+from google.adk.runners import InMemoryRunner
+from google.genai import types
+
+try:
+    from kag_agent.agent import root_agent   # after step 4.1 (wrapped in a package)
+except ModuleNotFoundError:
+    from agent import root_agent              # before step 4.1 (agent.py at repo root)
+
+DEFAULT_Q = "Who teaches the prerequisite for the course that uses PixelKit?"
+
+async def main(question):
+    runner = InMemoryRunner(agent=root_agent)
+    # ADK needs the session to exist before you send a message to it
+    await runner.session_service.create_session(
+        app_name=runner.app_name, user_id="student", session_id="s1"
+    )
+    # run_async expects a Content object, not a bare string
+    message = types.Content(role="user", parts=[types.Part(text=question)])
+    async for event in runner.run_async(
+        user_id="student", session_id="s1", new_message=message
+    ):
+        if event.content and event.content.parts:
+            for part in event.content.parts:
+                if part.text:
+                    print(part.text)
+
+if __name__ == "__main__":
+    q = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_Q
+    print(f"Q: {q}\\n")
+    asyncio.run(main(q))`}
+    ]
+  },
+  {
+    id:"trace", num:"05", time:"10 min", nav:"See the agent think",
+    title:"See the Agent Think",
+    html:`
+      <p>A black-box agent is impossible to trust or debug. ADK's <code class="inl">adk web</code> UI already gives you a built-in <strong>trace view</strong>: click any response and open the <strong>Events / Trace</strong> tab. For each question you'll see:</p>
+      <ul>
+        <li>the agent's reasoning,</li>
+        <li>which tool it picked,</li>
+        <li>the exact Cypher or query that ran,</li>
+        <li>the raw tool output,</li>
+        <li>and the timing of each step.</li>
+      </ul>
+      <p>That's observability in one screen: when the agent picks the <em>wrong</em> tool, the trace shows the exact step where its reasoning went sideways — which is how you'd improve the tool descriptions.</p>
+      <div class="note tip"><div class="ic">i</div><div><b>Going further (mention only).</b> In production, teams pipe these traces into a dedicated platform — Langfuse, or Vertex AI's own logging — to track tool-selection accuracy, latency, and hallucination across thousands of runs. The ADK trace view is the same idea at workshop scale.</div></div>
+    `,
+    code:[]
+  },
+  {
+    id:"wrap", num:"06", time:"5 min", nav:"Wrap-up & challenges",
+    title:"Wrap-up & Challenges",
+    html:`
+      <h3>What you learned</h3>
+      <ul>
+        <li><strong>RAG</strong> finds text that <em>sounds similar</em>; <strong>KAG</strong> walks <em>explicit connections</em>.</li>
+        <li>A <strong>knowledge graph</strong> turns scattered facts into something you can traverse and reason over.</li>
+        <li>An <strong>agent</strong> can choose the right retrieval tool per question — you don't have to commit to one.</li>
+        <li><strong>Tracing</strong> makes an agent's choices visible, which is what makes it debuggable and trustworthy.</li>
+      </ul>
+      <h3>Try these (take-home)</h3>
+      <ol>
+        <li><strong>Add a document</strong> to <code class="inl">corpus.py</code>, rebuild, and find a question only the graph can answer.</li>
+        <li><strong>Trick the agent</strong>: write a question where it picks the wrong tool, then fix its <code class="inl">instruction</code>.</li>
+        <li><strong>Hybrid mode</strong>: have the agent call <em>both</em> tools and compare — when do they disagree?</li>
+        <li><strong>Bigger graph</strong>: load a public dataset (movies, companies) and watch vector search degrade as the graph wins.</li>
+      </ol>
+      <h3>Troubleshooting</h3>
+      <ul>
+        <li><b>PermissionDenied on Vertex AI</b> → re-run the enable command and confirm your region matches <code class="inl">GOOGLE_CLOUD_LOCATION</code>.</li>
+        <li><b>Neo4j timeout</b> → the URI must use <code class="inl">neo4j+s://</code> and the AuraDB instance must be running (free instances pause when idle).</li>
+        <li><b>Empty Cypher result</b> → extraction may have used a different relation name; open the graph, check actual relationship types, adjust the schema hint.</li>
+        <li><b>Model not found</b> → list models with <code class="inl">gcloud ai models list --region=$GOOGLE_CLOUD_LOCATION</code> and swap the name in <code class="inl">config.py</code>.</li>
+      </ul>
+      <div class="note check"><div class="ic">✓</div><div><b>You're done.</b> You built both retrieval paradigms, made an agent route between them, and watched it reason. Swap in your own corpus and the entire pipeline still works.</div></div>
+    `,
+    code:[]
+  }
+];
+
+/* ---- reusable rich blocks injected into html via {{TOKENS}} ---- */
+const TABLE_COMPARE = `
+<div class="twrap"><table>
+<thead><tr><th></th><th>RAG (vector search)</th><th>KAG (knowledge graph)</th></tr></thead>
+<tbody>
+<tr><td>Stores knowledge as</td><td>Chunks of text</td><td>Entities + relationships</td></tr>
+<tr><td>Finds answers by</td><td>Similarity ("sounds alike")</td><td>Traversal ("is connected to")</td></tr>
+<tr><td>Great at</td><td><span class="win">Lookups, summaries</span></td><td><span class="win">Multi-step reasoning, counting</span></td></tr>
+<tr><td>Weak at</td><td><span class="lose">Connecting scattered facts</span></td><td><span class="lose">Fuzzy, descriptive questions</span></td></tr>
+<tr><td>Can explain <em>why</em>?</td><td>"These chunks were similar"</td><td>"Here's the exact path"</td></tr>
+</tbody></table></div>`;
+
+const TABLE_AGENT = `
+<div class="twrap"><table>
+<thead><tr><th>Question</th><th>Expected tool</th></tr></thead>
+<tbody>
+<tr><td>"What does Coastal Tech specialize in?"</td><td><code class="inl">query_vectors</code> (descriptive)</td></tr>
+<tr><td>"Who leads the Vision Lab?"</td><td><code class="inl">query_graph</code> (1 hop)</td></tr>
+<tr><td>"Who teaches the prerequisite for the course that uses PixelKit?"</td><td><code class="inl">query_graph</code> (multi-hop)</td></tr>
+</tbody></table></div>`;
+
+const ASCII_FLOW = `
+<div class="ascii">          your question
+                │
+          ┌─────▼──────┐   <span class="hi">"connections, or meaning?"</span>
+          │   Gemini   │
+          │   Agent    │
+          └─────┬──────┘
+           ┌────┴─────┐
+      ┌────▼───┐  ┌───▼────┐
+      │ <span class="hi">Neo4j</span>  │  │ <span class="hi2">Chroma</span> │
+      │ graph  │  │ vector │
+      └────┬───┘  └───┬────┘
+           └────┬─────┘
+                ▼
+   answer  <span class="hi2">(+ you can see which tool it used)</span></div>`;
+
+/* =====================================================================
+   RENDERING
+===================================================================== */
+function escapeHtml(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+// Single-pass tokenizer so injected markup can never be re-matched by a later rule.
+// We scan the raw code, classify each token, and emit escaped spans.
+function tint(code, lang){
+  const kw = lang==="python"
+    ? new Set(["import","from","def","return","with","for","in","if","else","as","async","await","class","None","True","False","and","or","not"])
+    : new Set(["gcloud","pip","python","export","echo","adk","cd","ls"]);
+  // token regex: comment | triple-string | dq-string | sq-string | number | word | other(1 char)
+  const re = lang==="python"
+    ? /(#[^\n]*)|("""[\s\S]*?""")|("(?:[^"\\]|\\.)*")|('(?:[^'\\]|\\.)*')|(\b\d+\b)|([A-Za-z_]\w*)|([\s\S])/g
+    : /(#[^\n]*)|("(?:[^"\\]|\\.)*")|('(?:[^'\\]|\\.)*')|(\b\d+\b)|([A-Za-z_][\w-]*)|([\s\S])/g;
+  let out="", m;
+  while((m=re.exec(code))!==null){
+    if(lang==="python"){
+      const [ ,c,t,dq,sq,num,word,other]=m;
+      if(c!==undefined) out+=`<span class="tok-c">${escapeHtml(c)}</span>`;
+      else if(t!==undefined) out+=`<span class="tok-s">${escapeHtml(t)}</span>`;
+      else if(dq!==undefined) out+=`<span class="tok-s">${escapeHtml(dq)}</span>`;
+      else if(sq!==undefined) out+=`<span class="tok-s">${escapeHtml(sq)}</span>`;
+      else if(num!==undefined) out+=`<span class="tok-n">${escapeHtml(num)}</span>`;
+      else if(word!==undefined) out+= kw.has(word)?`<span class="tok-k">${word}</span>`:escapeHtml(word);
+      else out+=escapeHtml(other);
+    } else {
+      const [ ,c,dq,sq,num,word,other]=m;
+      if(c!==undefined) out+=`<span class="tok-c">${escapeHtml(c)}</span>`;
+      else if(dq!==undefined) out+=`<span class="tok-s">${escapeHtml(dq)}</span>`;
+      else if(sq!==undefined) out+=`<span class="tok-s">${escapeHtml(sq)}</span>`;
+      else if(num!==undefined) out+=`<span class="tok-n">${escapeHtml(num)}</span>`;
+      else if(word!==undefined) out+= kw.has(word)?`<span class="tok-k">${word}</span>`:escapeHtml(word);
+      else out+=escapeHtml(other);
+    }
+  }
+  return out;
+}
+
+function codeBlock(c, idx){
+  const tinted = tint(c.code, c.lang);
+  return `<div class="code">
+    <div class="code-top">
+      <div class="code-file"><span class="lang">${c.lang}</span>${escapeHtml(c.file)}</div>
+      <button class="copy-btn" data-code="${encodeURIComponent(c.code)}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy
+      </button>
+    </div>
+    <pre><code>${tinted}</code></pre>
+  </div>`;
+}
+
+function renderStep(step){
+  let body = step.html
+    .replace("{{TABLE_COMPARE}}", TABLE_COMPARE)
+    .replace("{{TABLE_AGENT}}", TABLE_AGENT)
+    .replace("{{ASCII_FLOW}}", ASCII_FLOW);
+  // inject code blocks
+  body = body.replace(/\{\{CODE:(\d+)\}\}/g, (_,n)=> codeBlock(step.code[+n], +n));
+  return `<section class="step" id="${step.id}">
+    <div class="step-head">
+      <span class="step-kicker">STEP ${step.num}</span>
+      <span class="step-clock">⏱ ${step.time}</span>
+    </div>
+    <h2 class="step-title">${step.title}</h2>
+    ${body}
+    <div class="complete-row">
+      <button class="mark-btn" data-step="${step.id}">Mark step complete</button>
+      <span class="mark-hint">progress saves in this browser</span>
+    </div>
+  </section>`;
+}
+
+document.getElementById("content").innerHTML = STEPS.map(renderStep).join("");
+
+/* build nav nodes */
+const nav = document.getElementById("nav");
+STEPS.forEach(s=>{
+  const b = document.createElement("button");
+  b.className="nav-node"; b.dataset.target=s.id;
+  b.innerHTML = `<span class="pip"><span></span></span>
+    <span><span class="nav-num">STEP ${s.num} · ${s.time}</span><span class="nav-label">${s.nav}</span></span>`;
+  b.addEventListener("click",()=>{document.getElementById(s.id).scrollIntoView({behavior:"smooth"});closeMobile();});
+  nav.appendChild(b);
+});
+
+/* =====================================================================
+   PROGRESS (in-memory; no browser storage available in this sandbox)
+===================================================================== */
+let done = {};
+try{
+  const raw = safeGet("kag.progress");
+  if(raw) done = JSON.parse(raw) || {};
+}catch(e){ done = {}; }
+function saveProgress(){ safeSet("kag.progress", JSON.stringify(done)); }
+const navNodes = [...document.querySelectorAll(".nav-node")];
+
+function refreshProgress(){
+  const total = STEPS.length;
+  const count = Object.values(done).filter(Boolean).length;
+  document.getElementById("doneCount").textContent = count;
+  const pct = Math.round(count/total*100);
+  document.getElementById("topFill").style.width = pct+"%";
+  document.getElementById("topPct").textContent = pct+"%";
+  // edge fill height proportional to completed (relative to rail)
+  const railH = nav.scrollHeight - 28;
+  document.getElementById("edgeFill").style.height = (count/total*railH)+"px";
+  STEPS.forEach((s,i)=>{
+    const node = navNodes[i];
+    node.classList.toggle("done", !!done[s.id]);
+    const btn = document.querySelector(`.mark-btn[data-step="${s.id}"]`);
+    if(btn){
+      btn.classList.toggle("is-done", !!done[s.id]);
+      btn.textContent = done[s.id] ? "✓ Completed" : "Mark step complete";
+    }
+  });
+}
+
+document.querySelectorAll(".mark-btn").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    const id = btn.dataset.step;
+    done[id] = !done[id];
+    saveProgress();
+    refreshProgress();
+  });
+});
+
+document.getElementById("resetBtn").addEventListener("click",()=>{
+  done = {}; safeDel("kag.progress"); refreshProgress();
+});
+
+/* =====================================================================
+   COPY BUTTONS
+===================================================================== */
+document.querySelectorAll(".copy-btn").forEach(btn=>{
+  btn.addEventListener("click", async ()=>{
+    const text = decodeURIComponent(btn.dataset.code);
+    try{
+      await navigator.clipboard.writeText(text);
+    }catch(e){
+      const ta=document.createElement("textarea");ta.value=text;document.body.appendChild(ta);ta.select();
+      document.execCommand("copy");ta.remove();
+    }
+    btn.classList.add("copied");
+    const orig = btn.innerHTML;
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg> Copied`;
+    setTimeout(()=>{btn.classList.remove("copied");btn.innerHTML=orig;},1500);
+  });
+});
+
+/* =====================================================================
+   SCROLL SPY — highlight active section in the graph rail
+===================================================================== */
+const sections = STEPS.map(s=>document.getElementById(s.id));
+const spy = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      const i = sections.indexOf(e.target);
+      navNodes.forEach(n=>n.classList.remove("active"));
+      if(navNodes[i]) navNodes[i].classList.add("active");
+    }
+  });
+},{rootMargin:"-45% 0px -50% 0px"});
+sections.forEach(s=>spy.observe(s));
+
+/* =====================================================================
+   MOBILE MENU
+===================================================================== */
+const sidebar=document.getElementById("sidebar"), scrim=document.getElementById("scrim");
+function closeMobile(){sidebar.classList.remove("open");scrim.classList.remove("show");}
+document.getElementById("menuBtn").addEventListener("click",()=>{sidebar.classList.add("open");scrim.classList.add("show");});
+scrim.addEventListener("click",closeMobile);
+
+/* =====================================================================
+   THEME TOGGLE — persists in localStorage, else follows OS preference
+===================================================================== */
+const root = document.documentElement;
+const savedTheme = safeGet("kag.theme");
+const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+root.setAttribute("data-theme", savedTheme || (prefersDark ? "dark" : "light"));
+
+document.getElementById("themeBtn").addEventListener("click", ()=>{
+  const next = root.getAttribute("data-theme")==="dark" ? "light" : "dark";
+  root.setAttribute("data-theme", next);
+  safeSet("kag.theme", next);
+});
+
+refreshProgress();
+</script>
+</body>
+</html>
