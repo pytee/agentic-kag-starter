@@ -29,7 +29,10 @@ TEXT:
 
 
 def extract(text: str) -> dict:
-    resp = model.generate_content(PROMPT.format(text=text))
+    resp = model.generate_content(
+        PROMPT.format(text=text),
+        generation_config={"temperature": 0},  # deterministic extraction -> same graph every build
+    )
     raw = (
         resp.text.strip()
         .removeprefix("```json")

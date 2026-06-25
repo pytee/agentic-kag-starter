@@ -34,7 +34,8 @@ def _live_schema() -> str:
             f'{r["a"]} -[:{r["rel"]}]-> {r["b"]}'
             for r in s.run(
                 "MATCH (a)-[r]->(b) "
-                "RETURN a.name AS a, type(r) AS rel, b.name AS b LIMIT 40"
+                "RETURN a.name AS a, type(r) AS rel, b.name AS b "
+                "ORDER BY a, rel, b LIMIT 40"
             )
         ]
     return (
@@ -47,7 +48,10 @@ def _live_schema() -> str:
 
 def query_graph(question: str) -> str:
     """Answer relational questions by querying the Neo4j knowledge graph."""
-    resp = _model.generate_content(CYPHER_PROMPT.format(schema=_live_schema(), q=question))
+    resp = _model.generate_content(
+        CYPHER_PROMPT.format(schema=_live_schema(), q=question),
+        generation_config={"temperature": 0},  # deterministic Cypher, same answer every run
+    )
     cypher = (
         resp.text.strip()
         .removeprefix("```cypher")
